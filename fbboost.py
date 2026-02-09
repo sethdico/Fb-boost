@@ -43,8 +43,8 @@ class UI:
     def banner():
         os.system("cls" if os.name == "nt" else "clear")
         print(UI.LINE)
-        print(f"{UI.YELLOW}             NOVA BOOSTING SUITE {UI.WHITE}v2.0{UI.RESET}")
-        print(f"{UI.WHITE}        Multi-Threaded Automation for Termux{UI.RESET}")
+        print(f"{UI.YELLOW}             FB-BOOST AUTOMATION {UI.WHITE}v2.0{UI.RESET}")
+        print(f"{UI.WHITE}            Optimized for Termux/Android{UI.RESET}")
         print(UI.LINE)
 
     @staticmethod
@@ -135,7 +135,7 @@ class AccountCreator:
                 'reg_impression_id': re.search(r'name="reg_impression_id" value="(.*?)"', data).group(1)
             }
         except:
-            UI.log("ERROR", "Failed to handshake. IP Blocked?", UI.RED)
+            UI.log("ERROR", "Handshake failed. IP blocked.", UI.RED)
             return
 
         fname, lname = self.faker.first_name(), self.faker.last_name()
@@ -143,7 +143,7 @@ class AccountCreator:
         password = self.faker.password(length=12)
         encpass = f"#PWD_BROWSER:0:{int(time.time())}:{password}"
         
-        UI.log("INFO", f"Creating: {fname} {lname}", UI.WHITE)
+        UI.log("INFO", f"Trying: {fname} {lname}", UI.WHITE)
 
         payload.update({
             'ccp': '2', 'submission_request': 'true', 'helper': '', 'ns': '1', 'app_id': '103',
@@ -159,16 +159,16 @@ class AccountCreator:
             resp = self.session.post(Config.SUBMIT_URL, data=payload)
             if "c_user" in self.session.cookies.get_dict():
                 self.save(email, password, self.session.cookies.get_dict())
-                UI.log("SUCCESS", "Account Created (No Checkpoint)!", UI.GREEN)
+                UI.log("SUCCESS", "Account Live!", UI.GREEN)
             elif "confirmemail" in resp.url:
-                UI.log("WAIT", "Waiting for OTP...", UI.YELLOW)
+                UI.log("WAIT", "Polling OTP...", UI.YELLOW)
                 code = TempMail.get_code(login, domain)
                 if code:
                     self.verify(code, email, password)
                 else:
                     UI.log("FAIL", "OTP Timeout", UI.RED)
             else:
-                UI.log("FAIL", "Registration rejected by Facebook", UI.RED)
+                UI.log("FAIL", "Rejected by Meta AI", UI.RED)
         except Exception as e:
             UI.log("ERROR", str(e), UI.RED)
 
@@ -177,9 +177,9 @@ class AccountCreator:
         self.session.post("https://m.facebook.com/confirmemail.php", data=data)
         if "c_user" in self.session.cookies.get_dict():
             self.save(email, password, self.session.cookies.get_dict())
-            UI.log("SUCCESS", "Verified Successfully!", UI.GREEN)
+            UI.log("SUCCESS", "Account Verified!", UI.GREEN)
         else:
-            UI.log("FAIL", "Checkpoint after verification", UI.RED)
+            UI.log("FAIL", "Locked after OTP", UI.RED)
 
     def save(self, email, password, cookies):
         c_str = "; ".join([f"{k}={v}" for k, v in cookies.items()])
@@ -253,108 +253,86 @@ class FacebookManager:
 
 def menu_create():
     UI.banner()
-    print(f"{UI.YELLOW}[!] TIPS: Use 4G Data. Turn Airplane Mode ON/OFF between accounts.")
-    print(UI.LINE)
     try:
-        amt = int(input(f"{UI.CYAN}Amount to create > {UI.RESET}"))
+        amt = int(input(f"{UI.CYAN}Amount to reg > {UI.RESET}"))
         creator = AccountCreator()
         for i in range(amt):
-            print(f"\n{UI.WHITE}--- Account {i+1}/{amt} ---")
+            print(f"\n{UI.WHITE}--- Reg {i+1}/{amt} ---")
             creator.create()
             if i < amt - 1:
-                print(f"{UI.CYAN}Cooling down (10s)...")
                 time.sleep(10)
     except ValueError: pass
-    input(f"\n{UI.WHITE}Press Enter...")
+    input(f"\n{UI.WHITE}Enter to back...")
 
 def menu_extract():
     UI.banner()
-    print(f"{UI.YELLOW}Convert Email|Pass list to Access Tokens")
-    path = input(f"{UI.CYAN}Path to list (email|pass) > {UI.RESET}")
-    print("1. Save to FRAACCOUNT (Main)")
-    print("2. Save to RPWACCOUNT (Alt)")
+    path = input(f"{UI.CYAN}Input file path (email|pass) > {UI.RESET}")
+    print("1. Save to FRAACCOUNT")
+    print("2. Save to RPWACCOUNT")
     key = input("Select > ")
-    
     if os.path.exists(path):
         manager = FacebookManager()
         with open(path, 'r') as f:
             creds = [line.strip().split('|') for line in f if '|' in line]
-        
-        UI.log("START", f"Extracting {len(creds)} accounts...", UI.CYAN)
+        UI.log("START", f"Processing {len(creds)} items...", UI.CYAN)
         with ThreadPoolExecutor(max_workers=10) as ex:
             futures = [ex.submit(manager.login_extractor, c[0], c[1], key) for c in creds]
             for f in as_completed(futures):
-                if f.result(): print(f"{UI.GREEN}.", end="", flush=True)
-                else: print(f"{UI.RED}.", end="", flush=True)
+                print(f"{UI.GREEN if f.result() else UI.RED}.", end="", flush=True)
         print("\nDone.")
-    input(f"\n{UI.WHITE}Press Enter...")
+    input(f"\n{UI.WHITE}Enter to back...")
 
 def menu_boost():
     UI.banner()
     manager = FacebookManager()
-    print(f"{UI.YELLOW}Select Token Source:")
     for k, v in Config.FILES.items(): print(f"[{k}] {v}")
-    
-    src = input(f"{UI.CYAN}Select > {UI.RESET}")
+    src = input(f"{UI.CYAN}Source > {UI.RESET}")
     tokens = manager.get_tokens(src)
-    
     if not tokens:
-        print(f"{UI.RED}No tokens found! Create or Extract first.")
-        time.sleep(2)
+        time.sleep(1)
         return
-
     print(UI.LINE)
-    print(f"{UI.GREEN}Loaded {len(tokens)} Tokens")
     print(f"{UI.YELLOW}[1] React  [2] Comment  [3] Share  [4] Follow")
-    
     act = input(f"{UI.CYAN}Action > {UI.RESET}")
-    target = Utils.extract_id(input(f"{UI.WHITE}Link/ID > {UI.RESET}"))
-    
+    target = Utils.extract_id(input(f"{UI.WHITE}ID/URL > {UI.RESET}"))
     action_type, extra = "", None
     if act == '1':
         action_type = "REACT"
-        print("TYPE: LIKE, LOVE, WOW, HAHA, SAD, ANGRY")
-        extra = input("Type > ")
+        extra = input("Type (LIKE, LOVE, etc) > ")
     elif act == '2':
         action_type = "COMMENT"
-        extra = input("Comment > ")
+        extra = input("Text > ")
     elif act == '3': action_type = "SHARE"
     elif act == '4': action_type = "FOLLOW"
-
-    limit = int(input(f"{UI.WHITE}Amount > {UI.RESET}"))
+    limit = int(input(f"{UI.WHITE}Limit > {UI.RESET}"))
     if limit > len(tokens): limit = len(tokens)
-
-    UI.log("RUN", "Boosting started...", UI.CYAN)
+    UI.log("RUN", "Starting boost...", UI.CYAN)
     success = 0
     with ThreadPoolExecutor(max_workers=15) as ex:
         futures = [ex.submit(manager.perform_action, tokens[i], target, action_type, extra) for i in range(limit)]
         for f in as_completed(futures):
             if f.result(): success += 1
-            print(f"\r{UI.GREEN}Success: {success} / {limit}", end="")
-            
+            print(f"\r{UI.GREEN}Progress: {success} / {limit}", end="")
     print("\n")
-    input(f"{UI.WHITE}Press Enter...")
+    input(f"{UI.WHITE}Enter to back...")
 
 def main():
     Utils.ensure_files()
     while True:
         UI.banner()
-        print(f"{UI.YELLOW}[1] Auto Creator (Reg)")
-        print(f"{UI.YELLOW}[2] Token Extractor (Login)")
-        print(f"{UI.YELLOW}[3] Boosting Menu")
-        print(f"{UI.YELLOW}[4] Clear Data")
+        print(f"{UI.YELLOW}[1] Auto Register")
+        print(f"{UI.YELLOW}[2] Token Extractor")
+        print(f"{UI.YELLOW}[3] Boosting Tools")
+        print(f"{UI.YELLOW}[4] Wipe Data")
         print(f"{UI.YELLOW}[0] Exit")
         print(UI.LINE)
-        
         sel = input(f"{UI.CYAN}Select > {UI.RESET}")
-        
         if sel == '1': menu_create()
         elif sel == '2': menu_extract()
         elif sel == '3': menu_boost()
         elif sel == '4': 
             for f in Config.FILES.values():
                 open(os.path.join(Config.BASE_PATH, f), 'w').close()
-            print(f"{UI.GREEN}All data cleared.")
             time.sleep(1)
         elif sel == '0': sys.exit()
 
