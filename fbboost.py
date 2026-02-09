@@ -25,8 +25,13 @@ class Config:
         "3": "RPWACCOUNT.txt",
         "4": "RPWPAGES.txt"
     }
-    REG_URL = "https://x.facebook.com/reg/"
-    SUBMIT_URL = "https://x.facebook.com/reg/submit/"
+    # These domains are used in the original script to bypass WAF
+    REG_DOMAINS = [
+        "https://x.facebook.com/reg/",
+        "https://mbasic.facebook.com/reg/",
+        "https://m.facebook.com/reg/"
+    ]
+    # Signature used for the 'Handshake'
     API_KEY = '62f8ce9f74b12f84c123cc23437a4a32'
     ACCESS_TOKEN_SEED = '350685531728|62f8ce9f74b12f84c123cc23437a4a32'
 
@@ -43,8 +48,8 @@ class UI:
     def banner():
         os.system("cls" if os.name == "nt" else "clear")
         print(UI.LINE)
-        print(f"{UI.YELLOW}             FB-BOOST AUTOMATION {UI.WHITE}v2.0{UI.RESET}")
-        print(f"{UI.WHITE}            Optimized for Termux/Android{UI.RESET}")
+        print(f"{UI.YELLOW}             FB-BOOST ULTIMATE {UI.WHITE}v3.0{UI.RESET}")
+        print(f"{UI.WHITE}        Functional Scrape Replication (Termux){UI.RESET}")
         print(UI.LINE)
 
     @staticmethod
@@ -52,287 +57,207 @@ class UI:
         time_now = time.strftime("%H:%M:%S")
         print(f"[{time_now}] {color}[{prefix}] {UI.RESET}{message}")
 
-class Utils:
-    @staticmethod
-    def get_user_agent():
-        version = random.randint(110, 125)
-        android = random.randint(10, 13)
-        model = f"SM-S9{random.randint(0,2)}8B"
-        return (f"Mozilla/5.0 (Linux; Android {android}; {model}) "
-                f"AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{version}.0.0.0 Mobile Safari/537.36")
-
-    @staticmethod
-    def ensure_files():
-        if not os.path.exists(Config.BASE_PATH):
-            try:
-                os.makedirs(Config.BASE_PATH)
-            except OSError:
-                pass
-        for file_name in Config.FILES.values():
-            full_path = os.path.join(Config.BASE_PATH, file_name)
-            if not os.path.exists(full_path):
-                open(full_path, 'a').close()
-
-    @staticmethod
-    def extract_id(url):
-        try:
-            if "posts/" in url: return url.split("posts/")[1].split("/")[0].split("?")[0]
-            if "videos/" in url: return url.split("videos/")[1].split("/")[0].split("?")[0]
-            if "reel/" in url: return url.split("reel/")[1].split("/")[0].split("?")[0]
-            if "fbid=" in url: return url.split("fbid=")[1].split("&")[0]
-            if "id=" in url: return url.split("id=")[1].split("&")[0]
-            if url.isdigit(): return url
-            return url 
-        except:
-            return None
-
 class TempMail:
     @staticmethod
-    def generate():
+    def get_email():
         domains = ["1secmail.com", "1secmail.org", "1secmail.net"]
-        login = ''.join(random.choices(string.ascii_lowercase + string.digits, k=10))
+        user = ''.join(random.choices(string.ascii_lowercase + string.digits, k=10))
         domain = random.choice(domains)
-        return f"{login}@{domain}", login, domain
+        return f"{user}@{domain}", user, domain
 
     @staticmethod
-    def get_code(login, domain):
-        api = "https://www.1secmail.com/api/v1/"
+    def get_otp(user, domain):
+        api = f"https://www.1secmail.com/api/v1/?action=getMessages&login={user}&domain={domain}"
         for _ in range(12):
             try:
-                r = requests.get(f"{api}?action=getMessages&login={login}&domain={domain}").json()
+                r = requests.get(api, timeout=5).json()
                 if r:
                     msg_id = r[0]['id']
-                    r = requests.get(f"{api}?action=readMessage&login={login}&domain={domain}&id={msg_id}").json()
-                    body = r.get('textBody', '') + r.get('subject', '')
-                    code = re.search(r'\b\d{5}\b', body)
+                    msg_url = f"https://www.1secmail.com/api/v1/?action=readMessage&login={user}&domain={domain}&id={msg_id}"
+                    msg_data = requests.get(msg_url).json()
+                    code = re.search(r'\b\d{5}\b', msg_data.get('body', ''))
                     if code: return code.group(0)
             except: pass
             time.sleep(5)
         return None
 
-class AccountCreator:
+class FacebookAutomation:
     def __init__(self):
         self.session = requests.Session()
-        self.session.headers.update({
-            'User-Agent': Utils.get_user_agent(),
-            'Accept-Language': 'en-US,en;q=0.9',
-            'sec-ch-ua-platform': '"Android"',
-            'sec-ch-ua-mobile': '?1',
-            'Upgrade-Insecure-Requests': '1'
-        })
         self.faker = Faker()
+        self.ua = self.generate_ua()
 
-    def create(self):
-        try:
-            resp = self.session.get(Config.REG_URL)
-            data = resp.text
-            payload = {
-                'lsd': re.search(r'name="lsd" value="(.*?)"', data).group(1),
-                'jazoest': re.search(r'name="jazoest" value="(.*?)"', data).group(1),
-                'm_ts': re.search(r'name="m_ts" value="(.*?)"', data).group(1),
-                'li': re.search(r'name="li" value="(.*?)"', data).group(1),
-                'reg_instance': re.search(r'name="reg_instance" value="(.*?)"', data).group(1),
-                'reg_impression_id': re.search(r'name="reg_impression_id" value="(.*?)"', data).group(1)
-            }
-        except:
-            UI.log("ERROR", "Handshake failed. IP blocked.", UI.RED)
+    def generate_ua(self):
+        android_v = random.randint(9, 13)
+        fb_v = f"{random.randint(200, 440)}.0.0.{random.randint(10, 99)}.{random.randint(100, 200)}"
+        return f"Dalvik/2.1.0 (Linux; U; Android {android_v}; SM-G960F Build/R16NW) [FBAN/Orca-Android;FBAV/{fb_v};FBPN/com.facebook.orca;FBLC/en_US;FBBV/{random.randint(100000000, 999999999)};FBCR/Carrier;FBMF/samsung;FBBD/samsung;FBDV/SM-G960F;FBSV/{android_v}.0.0;]"
+
+    def get_handshake_tokens(self):
+        for url in Config.REG_DOMAINS:
+            try:
+                self.session.headers.update({'User-Agent': self.ua})
+                resp = self.session.get(url, timeout=10)
+                html = resp.text
+                return {
+                    'lsd': re.search(r'name="lsd" value="(.*?)"', html).group(1),
+                    'jazoest': re.search(r'name="jazoest" value="(.*?)"', html).group(1),
+                    'm_ts': re.search(r'name="m_ts" value="(.*?)"', html).group(1),
+                    'li': re.search(r'name="li" value="(.*?)"', html).group(1),
+                    'reg_instance': re.search(r'name="reg_instance" value="(.*?)"', html).group(1),
+                    'reg_impression_id': re.search(r'name="reg_impression_id" value="(.*?)"', html).group(1)
+                }
+            except: continue
+        return None
+
+    def register(self):
+        tokens = self.get_handshake_tokens()
+        if not tokens:
+            UI.log("FAIL", "Bypass failed. Reset Airplane Mode.", UI.RED)
             return
 
+        email, user, domain = TempMail.get_email()
         fname, lname = self.faker.first_name(), self.faker.last_name()
-        email, login, domain = TempMail.generate()
-        password = self.faker.password(length=12)
-        encpass = f"#PWD_BROWSER:0:{int(time.time())}:{password}"
-        
-        UI.log("INFO", f"Trying: {fname} {lname}", UI.WHITE)
+        pwd = f"Nova@{random.randint(100,999)}!"
+        # Browser Password Encryption (mimics original script)
+        encpass = f"#PWD_BROWSER:0:{int(time.time())}:{pwd}"
 
-        payload.update({
-            'ccp': '2', 'submission_request': 'true', 'helper': '', 'ns': '1', 'app_id': '103',
+        payload = {
+            **tokens,
+            'ccp': '2', 'ns': '1', 'app_id': '103', 'submission_request': 'true',
             'firstname': fname, 'lastname': lname, 'reg_email__': email,
-            'sex': random.choice(['1', '2']), 'reg_passwd__': password, 'encpass': encpass,
-            'birthday_day': str(random.randint(1, 28)), 
+            'sex': random.choice(['1', '2']), 'reg_passwd__': pwd, 'encpass': encpass,
+            'birthday_day': str(random.randint(1, 28)),
             'birthday_month': str(random.randint(1, 12)),
-            'birthday_year': str(random.randint(1998, 2005)),
+            'birthday_year': str(random.randint(1995, 2006)),
             'submit': 'Sign Up'
-        })
-
-        try:
-            resp = self.session.post(Config.SUBMIT_URL, data=payload)
-            if "c_user" in self.session.cookies.get_dict():
-                self.save(email, password, self.session.cookies.get_dict())
-                UI.log("SUCCESS", "Account Live!", UI.GREEN)
-            elif "confirmemail" in resp.url:
-                UI.log("WAIT", "Polling OTP...", UI.YELLOW)
-                code = TempMail.get_code(login, domain)
-                if code:
-                    self.verify(code, email, password)
-                else:
-                    UI.log("FAIL", "OTP Timeout", UI.RED)
-            else:
-                UI.log("FAIL", "Rejected by Meta AI", UI.RED)
-        except Exception as e:
-            UI.log("ERROR", str(e), UI.RED)
-
-    def verify(self, code, email, password):
-        data = {'c': code, 'submit': 'Confirm'}
-        self.session.post("https://m.facebook.com/confirmemail.php", data=data)
-        if "c_user" in self.session.cookies.get_dict():
-            self.save(email, password, self.session.cookies.get_dict())
-            UI.log("SUCCESS", "Account Verified!", UI.GREEN)
-        else:
-            UI.log("FAIL", "Locked after OTP", UI.RED)
-
-    def save(self, email, password, cookies):
-        c_str = "; ".join([f"{k}={v}" for k, v in cookies.items()])
-        path = os.path.join(Config.BASE_PATH, "FRAACCOUNT.txt")
-        with open(path, "a") as f:
-            f.write(f"{email}|{password}|{c_str}\n")
-
-class FacebookManager:
-    def get_tokens(self, file_key):
-        file_name = Config.FILES.get(str(file_key))
-        if not file_name: return []
-        path = os.path.join(Config.BASE_PATH, file_name)
-        try:
-            with open(path, 'r', encoding='utf-8', errors='ignore') as f:
-                lines = [line.strip() for line in f if line.strip()]
-            tokens = []
-            for line in lines:
-                parts = line.split("|")
-                for part in parts:
-                    if part.startswith("EAA"):
-                        tokens.append(part)
-                        break
-            return tokens
-        except: return []
-
-    def perform_action(self, token, target_id, action_type, extra_data=None):
-        url = None
-        data = {'access_token': token}
-        headers = {'User-Agent': Utils.get_user_agent()}
-
-        if action_type == "REACT":
-            url = f'https://graph.facebook.com/{target_id}/reactions'
-            data['type'] = extra_data.upper()
-        elif action_type == "COMMENT":
-            url = f'https://graph.facebook.com/{target_id}/comments'
-            data['message'] = extra_data
-        elif action_type == "SHARE":
-            url = f'https://graph.facebook.com/me/feed'
-            data['link'] = f"https://www.facebook.com/{target_id}"
-            data['published'] = '1'
-        elif action_type == "FOLLOW":
-            url = f'https://graph.facebook.com/{target_id}/subscribers'
-
-        try:
-            if url:
-                req = requests.post(url, data=data, headers=headers, timeout=10)
-                return req.status_code == 200
-        except: return False
-        return False
-
-    def login_extractor(self, email, password, save_key):
-        data = {
-            'method': 'auth.login',
-            'fb_api_req_friendly_name': 'authenticate',
-            'fb_api_caller_class': 'com.facebook.account.login.protocol.Fb4aAuthHandler',
-            'api_key': Config.API_KEY,
-            'email': email,
-            'password': password,
-            'access_token': Config.ACCESS_TOKEN_SEED
         }
+
         try:
-            req = requests.post('https://b-graph.facebook.com/auth/login', data=data).json()
-            if 'access_token' in req:
-                token = req['access_token']
-                path = os.path.join(Config.BASE_PATH, Config.FILES[str(save_key)])
-                with open(path, 'a') as f:
-                    f.write(f"{req['uid']}|{token}\n")
-                return True
+            resp = self.session.post("https://x.facebook.com/reg/submit/", data=payload, timeout=15)
+            if "confirmemail" in resp.url or "checkpoint" in resp.url:
+                UI.log("WAIT", f"Verification sent to {email}", UI.YELLOW)
+                otp = TempMail.get_otp(user, domain)
+                if otp:
+                    self.verify_otp(otp, email, pwd)
+                else:
+                    UI.log("FAIL", "OTP Timeout (Email domain flagged)", UI.RED)
+            elif "c_user" in self.session.cookies.get_dict():
+                self.save_account(email, pwd, self.session.cookies.get_dict())
+                UI.log("SUCCESS", f"Live: {fname}", UI.GREEN)
+            else:
+                UI.log("FAIL", "Meta blocked the request", UI.RED)
+        except Exception as e:
+            UI.log("ERROR", "Connection Timeout", UI.RED)
+
+    def verify_otp(self, otp, email, pwd):
+        data = {'c': otp, 'submit': 'Confirm'}
+        try:
+            r = self.session.post("https://m.facebook.com/confirmemail.php", data=data, timeout=10)
+            if "c_user" in self.session.cookies.get_dict():
+                self.save_account(email, pwd, self.session.cookies.get_dict())
+                UI.log("SUCCESS", "Account Verified!", UI.GREEN)
+            else:
+                UI.log("FAIL", "Checkpoint after OTP", UI.RED)
         except: pass
-        return False
 
-def menu_create():
-    UI.banner()
-    try:
-        amt = int(input(f"{UI.CYAN}Amount to reg > {UI.RESET}"))
-        creator = AccountCreator()
-        for i in range(amt):
-            print(f"\n{UI.WHITE}--- Reg {i+1}/{amt} ---")
-            creator.create()
-            if i < amt - 1:
-                time.sleep(10)
-    except ValueError: pass
-    input(f"\n{UI.WHITE}Enter to back...")
+    def save_account(self, email, pwd, cookies):
+        c_str = "; ".join([f"{k}={v}" for k, v in cookies.items()])
+        with open(os.path.join(Config.BASE_PATH, "FRAACCOUNT.txt"), "a") as f:
+            f.write(f"{email}|{pwd}|{c_str}\n")
 
-def menu_extract():
+    def perform_boost(self, token, target_id, action, data=None):
+        headers = {'User-Agent': self.ua}
+        base_url = f"https://graph.facebook.com/{target_id}"
+        params = {'access_token': token}
+
+        try:
+            if action == "REACT":
+                r = requests.post(f"{base_url}/reactions", params={**params, 'type': data.upper()}, headers=headers)
+            elif action == "COMMENT":
+                r = requests.post(f"{base_url}/comments", params={**params, 'message': data}, headers=headers)
+            elif action == "SHARE":
+                r = requests.post(f"https://graph.facebook.com/me/feed", params={**params, 'link': f"fb.com/{target_id}", 'published': '0'}, headers=headers)
+            elif action == "FOLLOW":
+                r = requests.post(f"{base_url}/subscribers", params=params, headers=headers)
+            return r.status_code == 200
+        except: return False
+
+# --- UTILS & MENUS ---
+def ensure():
+    if not os.path.exists(Config.BASE_PATH): os.makedirs(Config.BASE_PATH)
+    for f in Config.FILES.values():
+        path = os.path.join(Config.BASE_PATH, f)
+        if not os.path.exists(path): open(path, 'a').close()
+
+def menu_reg():
     UI.banner()
-    path = input(f"{UI.CYAN}Input file path (email|pass) > {UI.RESET}")
-    print("1. Save to FRAACCOUNT")
-    print("2. Save to RPWACCOUNT")
-    key = input("Select > ")
-    if os.path.exists(path):
-        manager = FacebookManager()
-        with open(path, 'r') as f:
-            creds = [line.strip().split('|') for line in f if '|' in line]
-        UI.log("START", f"Processing {len(creds)} items...", UI.CYAN)
-        with ThreadPoolExecutor(max_workers=10) as ex:
-            futures = [ex.submit(manager.login_extractor, c[0], c[1], key) for c in creds]
-            for f in as_completed(futures):
-                print(f"{UI.GREEN if f.result() else UI.RED}.", end="", flush=True)
-        print("\nDone.")
-    input(f"\n{UI.WHITE}Enter to back...")
+    amt = int(input(f"{UI.CYAN}Number of accounts to create > {UI.RESET}"))
+    bot = FacebookAutomation()
+    for i in range(amt):
+        print(f"\n{UI.WHITE}--- Account {i+1}/{amt} ---")
+        bot.register()
+        if i < amt - 1:
+            UI.log("INFO", "Resetting IP (Toggle Airplane Mode)...", UI.CYAN)
+            time.sleep(10)
+    input(f"\n{UI.WHITE}Press Enter to Back...")
 
 def menu_boost():
     UI.banner()
-    manager = FacebookManager()
+    bot = FacebookAutomation()
     for k, v in Config.FILES.items(): print(f"[{k}] {v}")
-    src = input(f"{UI.CYAN}Source > {UI.RESET}")
-    tokens = manager.get_tokens(src)
+    choice = input(f"{UI.CYAN}Select Source > {UI.RESET}")
+    
+    path = os.path.join(Config.BASE_PATH, Config.FILES.get(choice, "FRAACCOUNT.txt"))
+    with open(path, 'r') as f:
+        tokens = []
+        for line in f:
+            match = re.search(r'EAA\w+', line)
+            if match: tokens.append(match.group(0))
+    
     if not tokens:
-        time.sleep(1)
+        print(f"{UI.RED}No tokens found! Extract or Register first.")
+        time.sleep(2)
         return
-    print(UI.LINE)
-    print(f"{UI.YELLOW}[1] React  [2] Comment  [3] Share  [4] Follow")
-    act = input(f"{UI.CYAN}Action > {UI.RESET}")
-    target = Utils.extract_id(input(f"{UI.WHITE}ID/URL > {UI.RESET}"))
-    action_type, extra = "", None
-    if act == '1':
-        action_type = "REACT"
-        extra = input("Type (LIKE, LOVE, etc) > ")
-    elif act == '2':
-        action_type = "COMMENT"
-        extra = input("Text > ")
-    elif act == '3': action_type = "SHARE"
-    elif act == '4': action_type = "FOLLOW"
-    limit = int(input(f"{UI.WHITE}Limit > {UI.RESET}"))
-    if limit > len(tokens): limit = len(tokens)
-    UI.log("RUN", "Starting boost...", UI.CYAN)
+
+    print(f"\n{UI.YELLOW}[1] React [2] Comment [3] Share [4] Follow")
+    act_type = input(f"{UI.CYAN}Action > {UI.RESET}")
+    target = input(f"{UI.WHITE}Target ID/URL > {UI.RESET}")
+    # Extract ID
+    if "/" in target: 
+        if "fbid=" in target: target = target.split("fbid=")[1].split("&")[0]
+        else: target = target.split("/")[-1].split("?")[0]
+
+    extra = None
+    if act_type == '1': extra = input("Type (LIKE, LOVE, HAHA, etc) > ")
+    elif act_type == '2': extra = input("Comment Text > ")
+    
+    limit = int(input(f"{UI.WHITE}Use how many accounts? (Max {len(tokens)}) > {UI.RESET}"))
+    
+    UI.log("RUN", "Boosting in progress...", UI.CYAN)
     success = 0
-    with ThreadPoolExecutor(max_workers=15) as ex:
-        futures = [ex.submit(manager.perform_action, tokens[i], target, action_type, extra) for i in range(limit)]
+    with ThreadPoolExecutor(max_workers=20) as ex:
+        futures = [ex.submit(bot.perform_boost, tokens[i], target, ["","REACT","COMMENT","SHARE","FOLLOW"][int(act_type)], extra) for i in range(min(limit, len(tokens)))]
         for f in as_completed(futures):
             if f.result(): success += 1
-            print(f"\r{UI.GREEN}Progress: {success} / {limit}", end="")
+            print(f"\r{UI.GREEN}Progress: {success}", end="")
     print("\n")
-    input(f"{UI.WHITE}Enter to back...")
+    input(f"{UI.WHITE}Finished. Enter to Back...")
 
 def main():
-    Utils.ensure_files()
+    ensure()
     while True:
         UI.banner()
-        print(f"{UI.YELLOW}[1] Auto Register")
-        print(f"{UI.YELLOW}[2] Token Extractor")
-        print(f"{UI.YELLOW}[3] Boosting Tools")
-        print(f"{UI.YELLOW}[4] Wipe Data")
+        print(f"{UI.YELLOW}[1] Multi-Domain Auto Register")
+        print(f"{UI.YELLOW}[2] Mass Boosting Tools")
+        print(f"{UI.YELLOW}[3] Clean Storage")
         print(f"{UI.YELLOW}[0] Exit")
         print(UI.LINE)
         sel = input(f"{UI.CYAN}Select > {UI.RESET}")
-        if sel == '1': menu_create()
-        elif sel == '2': menu_extract()
-        elif sel == '3': menu_boost()
-        elif sel == '4': 
-            for f in Config.FILES.values():
-                open(os.path.join(Config.BASE_PATH, f), 'w').close()
+        if sel == '1': menu_reg()
+        elif sel == '2': menu_boost()
+        elif sel == '3':
+            for f in Config.FILES.values(): open(os.path.join(Config.BASE_PATH, f), 'w').close()
+            print(f"{UI.GREEN}Wiped.")
             time.sleep(1)
         elif sel == '0': sys.exit()
 
